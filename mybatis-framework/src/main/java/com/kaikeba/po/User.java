@@ -25,7 +25,7 @@ public class User {
     /**
      * 性别
      */
-    private char sex;
+    private String sex;
 
     /**
      * 地址

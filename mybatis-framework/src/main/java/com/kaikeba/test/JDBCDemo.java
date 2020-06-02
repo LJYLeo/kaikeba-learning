@@ -45,7 +45,7 @@ public class JDBCDemo {
                 User user = new User();
                 user.setId(resultSet.getInt("id"));
                 user.setName(resultSet.getString("name"));
-                user.setSex(resultSet.getString("sex").charAt(0));
+                user.setSex(resultSet.getString("sex"));
                 user.setAddress(resultSet.getString("address"));
                 user.setEmail(resultSet.getString("email"));
 
