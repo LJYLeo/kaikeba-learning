@@ -9,6 +9,6 @@ package com.kaikeba.framework.sqlsource;
  */
 public interface SqlSource {
 
-    BoundSql getBoundSql();
+    BoundSql getBoundSql(Object param);
 
 }

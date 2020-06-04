@@ -3,7 +3,7 @@ package com.kaikeba.framework.sqlsource;
 import java.util.List;
 
 /**
- * 功能描述：
+ * 功能描述：sql封装对象
  *
  * @author 刘嘉宇
  * @version 1.0.0
