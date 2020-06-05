@@ -1,7 +1,17 @@
 package com.kaikeba.test;
 
+import com.kaikeba.framework.config.Configuration;
+import com.kaikeba.framework.config.MappedStatement;
+import com.kaikeba.framework.sqlnode.SqlNode;
+import com.kaikeba.framework.sqlnode.support.MixedSqlNode;
+import com.kaikeba.framework.sqlnode.support.TextSqlNode;
+import com.kaikeba.framework.sqlsource.SqlSource;
+import com.kaikeba.framework.sqlsource.support.StaticSqlSource;
 import com.kaikeba.po.User;
 import com.kaikeba.util.SimpleTypeRegistry;
+import org.apache.commons.dbcp.BasicDataSource;
+import org.dom4j.*;
+import org.dom4j.io.SAXReader;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -22,22 +32,167 @@ public class MybatisV2 {
 
     private Properties properties = new Properties();
 
+    private Configuration configuration = new Configuration();
+
+    private String namespace;
+
     @Test
     public void test() {
 
-        loadProperties("jdbc.properties");
+        loadXML("mybatis-config.xml");
 
         // 入参普通属性
-        List<User> userList = selectList("queryUserById", 1);
-        System.out.println(userList);
+        /*List<User> userList = selectList("test.findUserById", 1);
+        System.out.println(userList);*/
 
-        // 有多个参数的复杂入参
-        userList = selectList("queryUserByCondition", new HashMap<String, Object>() {{
-            put("name", "刘嘉宇");
-            put("sex", "男");
-        }});
-        System.out.println(userList);
+    }
 
+    private void loadXML(String s) {
+
+        InputStream is = getResourceAsStream(s);
+        Document document = createDocument(is);
+        if (document != null) {
+            parseConfiguration(document.getRootElement());
+        }
+
+    }
+
+    private void parseConfiguration(Element rootElement) {
+        Element environments = rootElement.element("environments");
+        parseEnviroments(environments);
+        Element mappers = rootElement.element("mappers");
+        parseMappers(mappers);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void parseMappers(Element mappers) {
+        List<Element> mapperList = mappers.elements("mapper");
+        for (Element element : mapperList) {
+            String resource = element.attributeValue("resource");
+            InputStream mapperIs = getResourceAsStream(resource);
+            Document document = createDocument(mapperIs);
+            if (document != null) {
+                parseMapper(document.getRootElement());
+            }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void parseMapper(Element rootElement) {
+        namespace = rootElement.attributeValue("namespace");
+        List<Element> selectElements = rootElement.elements("select");
+        for (Element selectElement : selectElements) {
+            parseStatementElement(selectElement);
+        }
+    }
+
+    private void parseStatementElement(Element selectElement) {
+        String statementId = selectElement.attributeValue("id");
+        if (statementId == null || "".equals(statementId)) {
+            return;
+        }
+        statementId = namespace + statementId;
+
+        String parameterType = selectElement.attributeValue("parameterType");
+        Class<?> parameterClass = resolveType(parameterType);
+
+        String resultType = selectElement.attributeValue("resultType");
+        Class<?> resultClass = resolveType(resultType);
+
+        String statementType = selectElement.attributeValue("statementType");
+        statementType = statementType == null || "".equals(statementType) ? "prepared" : statementType;
+
+        SqlSource sqlSource = createSqlSource(selectElement);
+
+        MappedStatement mappedStatement = new MappedStatement(statementId, parameterClass, resultClass, statementType
+                , sqlSource);
+
+        configuration.addMappedStatement(statementId, mappedStatement);
+    }
+
+    private SqlSource createSqlSource(Element selectElement) {
+        MixedSqlNode mixedSqlNode = parseDynamicTags(selectElement);
+        return null;
+    }
+
+    private MixedSqlNode parseDynamicTags(Element selectElement) {
+        List<SqlNode> sqlNodes = new ArrayList<>();
+        int nodeCount = selectElement.nodeCount();
+        for (int i = 0; i < nodeCount; i++) {
+            Node node = selectElement.node(i);
+            if (node instanceof Text) {
+                String text = node.getText().trim();
+                if ("".equals(text)) {
+                    continue;
+                }
+                TextSqlNode textSqlNode = new TextSqlNode(text);
+            } else if (node instanceof Element) {
+
+            }
+        }
+        return new MixedSqlNode(sqlNodes);
+    }
+
+    private Class<?> resolveType(String className) {
+        try {
+            if (className != null) {
+                return Class.forName(className);
+            }
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void parseEnviroments(Element environments) {
+        String aDefault = environments.attributeValue("default");
+        List<Element> environmentList = environments.elements("environment");
+        for (Element element : environmentList) {
+            String id = element.attributeValue("id");
+            if (id.equals(aDefault)) {
+                Element dataSource = element.element("dataSource");
+                parseDataSource(dataSource);
+                break;
+            }
+        }
+    }
+
+    private void parseDataSource(Element dataSource) {
+        String type = dataSource.attributeValue("type");
+        if ("DBCP".equals(type)) {
+            Properties properties = parseProperties(dataSource);
+            BasicDataSource basicDataSource = new BasicDataSource();
+            basicDataSource.setDriverClassName(properties.getProperty("driver"));
+            basicDataSource.setUrl(properties.getProperty("url"));
+            basicDataSource.setUsername(properties.getProperty("username"));
+            basicDataSource.setPassword(properties.getProperty("password"));
+            configuration.setDataSource(basicDataSource);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Properties parseProperties(Element dataSource) {
+        Properties properties = new Properties();
+        List<Element> propertyList = dataSource.elements("property");
+        for (Element property : propertyList) {
+            properties.put(property.attributeValue("name"), property.attributeValue("value"));
+        }
+        return properties;
+    }
+
+    private Document createDocument(InputStream is) {
+        try {
+            SAXReader saxReader = new SAXReader();
+            return saxReader.read(is);
+        } catch (DocumentException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    private InputStream getResourceAsStream(String s) {
+        return this.getClass().getClassLoader().getResourceAsStream(s);
     }
 
     @SuppressWarnings("unchecked")
