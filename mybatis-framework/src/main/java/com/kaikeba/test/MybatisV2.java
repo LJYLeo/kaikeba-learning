@@ -3,9 +3,15 @@ package com.kaikeba.test;
 import com.kaikeba.framework.config.Configuration;
 import com.kaikeba.framework.config.MappedStatement;
 import com.kaikeba.framework.sqlnode.SqlNode;
+import com.kaikeba.framework.sqlnode.support.IfSqlNode;
 import com.kaikeba.framework.sqlnode.support.MixedSqlNode;
+import com.kaikeba.framework.sqlnode.support.StaticTextSqlNode;
 import com.kaikeba.framework.sqlnode.support.TextSqlNode;
+import com.kaikeba.framework.sqlsource.BoundSql;
+import com.kaikeba.framework.sqlsource.ParameterMapping;
 import com.kaikeba.framework.sqlsource.SqlSource;
+import com.kaikeba.framework.sqlsource.support.DynamicSqlSource;
+import com.kaikeba.framework.sqlsource.support.RawSqlSource;
 import com.kaikeba.framework.sqlsource.support.StaticSqlSource;
 import com.kaikeba.po.User;
 import com.kaikeba.util.SimpleTypeRegistry;
@@ -30,11 +36,11 @@ import java.util.*;
  */
 public class MybatisV2 {
 
-    private Properties properties = new Properties();
-
     private Configuration configuration = new Configuration();
 
     private String namespace;
+
+    private boolean isDynamic;
 
     @Test
     public void test() {
@@ -42,8 +48,12 @@ public class MybatisV2 {
         loadXML("mybatis-config.xml");
 
         // 入参普通属性
-        /*List<User> userList = selectList("test.findUserById", 1);
-        System.out.println(userList);*/
+        Map<String, Object> param = new HashMap<String, Object>() {{
+            put("id", 1);
+            put("username", "t");
+        }};
+        List<User> userList = selectList("test.findUserById", param);
+        System.out.println(userList);
 
     }
 
@@ -91,7 +101,7 @@ public class MybatisV2 {
         if (statementId == null || "".equals(statementId)) {
             return;
         }
-        statementId = namespace + statementId;
+        statementId = namespace + "." + statementId;
 
         String parameterType = selectElement.attributeValue("parameterType");
         Class<?> parameterClass = resolveType(parameterType);
@@ -112,7 +122,13 @@ public class MybatisV2 {
 
     private SqlSource createSqlSource(Element selectElement) {
         MixedSqlNode mixedSqlNode = parseDynamicTags(selectElement);
-        return null;
+        SqlSource sqlSource;
+        if (isDynamic) {
+            sqlSource = new DynamicSqlSource(mixedSqlNode);
+        } else {
+            sqlSource = new RawSqlSource(mixedSqlNode);
+        }
+        return sqlSource;
     }
 
     private MixedSqlNode parseDynamicTags(Element selectElement) {
@@ -126,8 +142,23 @@ public class MybatisV2 {
                     continue;
                 }
                 TextSqlNode textSqlNode = new TextSqlNode(text);
+                if (textSqlNode.isDynamic()) {
+                    isDynamic = true;
+                    sqlNodes.add(textSqlNode);
+                } else {
+                    sqlNodes.add(new StaticTextSqlNode(text));
+                }
             } else if (node instanceof Element) {
-
+                isDynamic = true;
+                Element element = (Element) node;
+                String name = element.getName();
+                if ("if".equals(name)) {
+                    String test = element.attributeValue("test");
+                    MixedSqlNode mixedSqlNode = parseDynamicTags(element);
+                    sqlNodes.add(new IfSqlNode(test, mixedSqlNode));
+                } else if ("where".equals(name)) {
+                    // 暂不实现
+                }
             }
         }
         return new MixedSqlNode(sqlNodes);
@@ -195,67 +226,42 @@ public class MybatisV2 {
         return this.getClass().getClassLoader().getResourceAsStream(s);
     }
 
-    @SuppressWarnings("unchecked")
-    private <T> List<T> selectList(String statementId, Object params) {
+    private <T> List<T> selectList(String statementId, Object param) {
 
         Connection connection = null;
         PreparedStatement preparedStatement = null;
-        ResultSet resultSet = null;
-        List<T> resultList = new ArrayList<>();
+        ResultSet rs = null;
+        List<T> results = new ArrayList<>();
 
         try {
 
-            // 加载驱动
-            Class.forName(properties.getProperty("db.driver"));
+            MappedStatement mappedStatement = configuration.getMappedStatementById(statementId);
+            connection = getConnection();
 
-            // 获取连接
-            connection = DriverManager.getConnection(properties.getProperty("db.url"), properties.getProperty("db"
-                    + ".user"), properties.getProperty("db.password"));
+            BoundSql boundSql = mappedStatement.getSqlSource().getBoundSql(param);
+            String sql = boundSql.getSql();
+            System.out.println(sql);
 
-            // 预编译sql
-            preparedStatement = connection.prepareStatement(properties.getProperty("db.sql." + statementId));
-
-            // 设置参数
-            if (SimpleTypeRegistry.isSimpleType(params.getClass())) {
-                // 暂时默认1个参数，直接设置值
-                preparedStatement.setObject(1, params);
-            } else if (params instanceof Map) {
-                // 根据配置信息依次取参数值并注入preparedStatement
-                Map paramsMap = (Map) params;
-                String paramsText = properties.getProperty("db.sql." + statementId + ".params");
-                String[] paramTextArray = paramsText.split(",");
-                for (int i = 0; i < paramTextArray.length; i++) {
-                    preparedStatement.setObject(i + 1, paramsMap.get(paramTextArray[i]));
+            String statementType = mappedStatement.getStatementType();
+            if (connection != null) {
+                if ("prepared".equals(statementType)) {
+                    preparedStatement = connection.prepareStatement(sql);
+                    setParameters(preparedStatement, param, boundSql);
+                    rs = preparedStatement.executeQuery();
+                    handleResultSet(rs, results, mappedStatement.getResultTypeClass());
+                } else {
+                    // 暂不实现
                 }
-            } else {
-                // 暂不实现
             }
 
-            // 查询结果
-            resultSet = preparedStatement.executeQuery();
-
-            while (resultSet.next()) {
-
-                String className = properties.getProperty("db.sql." + statementId + ".returnType");
-                Class<?> resultClass = Class.forName(className);
-                T result = (T) resultClass.newInstance();
-                for (Field field : resultClass.getDeclaredFields()) {
-                    // 赋予权限，否则私有变量不好赋值
-                    field.setAccessible(true);
-                    field.set(result, resultSet.getObject(field.getName()));
-                }
-
-                resultList.add(result);
-
-            }
+            return results;
 
         } catch (Exception e) {
             e.printStackTrace();
         } finally {
-
             try {
-                if (resultSet != null) {
-                    resultSet.close();
+                if (rs != null) {
+                    rs.close();
                 }
                 if (preparedStatement != null) {
                     preparedStatement.close();
@@ -266,29 +272,47 @@ public class MybatisV2 {
             } catch (SQLException throwables) {
                 throwables.printStackTrace();
             }
-
         }
 
-        return resultList;
+        return null;
 
     }
 
-    private void loadProperties(String fileName) {
-        InputStream is = null;
-        try {
-            is = this.getClass().getClassLoader().getResourceAsStream(fileName);
-            properties.load(is);
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
-            try {
-                if (is != null) {
-                    is.close();
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
+    @SuppressWarnings("unchecked")
+    private <T> void handleResultSet(ResultSet rs, List<T> results, Class<?> clazz) throws Exception {
+        while (rs.next()) {
+            T result = (T) clazz.newInstance();
+            for (Field field : clazz.getDeclaredFields()) {
+                // 赋予权限，否则私有变量不好赋值
+                field.setAccessible(true);
+                field.set(result, rs.getObject(field.getName()));
             }
+            results.add(result);
         }
+    }
+
+    private void setParameters(PreparedStatement preparedStatement, Object param, BoundSql boundSql) throws Exception {
+        if (SimpleTypeRegistry.isSimpleType(param.getClass())) {
+            preparedStatement.setObject(1, param);
+        } else if (param instanceof Map) {
+            Map map = (Map) param;
+            List<ParameterMapping> parameterMappings = boundSql.getParameterMappings();
+            for (int i = 0; i < parameterMappings.size(); i++) {
+                ParameterMapping parameterMapping = parameterMappings.get(i);
+                preparedStatement.setObject(i + 1, map.get(parameterMapping.getName()));
+            }
+        } else {
+            // 暂不实现
+        }
+    }
+
+    private Connection getConnection() {
+        try {
+            return configuration.getDataSource().getConnection();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
     }
 
 }

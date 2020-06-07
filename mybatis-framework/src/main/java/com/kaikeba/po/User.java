@@ -15,7 +15,7 @@ public class User {
     /**
      * 自增id
      */
-    private int id;
+    private long id;
 
     /**
      * 姓名

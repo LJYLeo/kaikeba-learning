@@ -31,6 +31,10 @@ public class TextSqlNode implements SqlNode {
 
     }
 
+    public boolean isDynamic() {
+        return sqlText.contains("${");
+    }
+
     /**
      * ${}处理占位符方法
      */
