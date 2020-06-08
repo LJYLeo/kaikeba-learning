@@ -1,5 +1,7 @@
 package com.kaikeba.framework.config;
 
+import com.kaikeba.framework.handler.*;
+
 import javax.sql.DataSource;
 import java.util.HashMap;
 import java.util.Map;
@@ -31,6 +33,22 @@ public class Configuration {
 
     public void addMappedStatement(String statementId, MappedStatement mappedStatement) {
         this.mappedStatements.put(statementId, mappedStatement);
+    }
+
+    public ParameterHandler newParameterHandler() {
+        return new DefaultParameterHandler();
+    }
+
+    public ResultSetHandler newResultSetHandler() {
+        return new DefaultResultSetHandler();
+    }
+
+    public StatementHandler newStatementHandler(String statementType) {
+        StatementHandler statementHandler = null;
+        if (statementType.equals("prepared")) {
+            statementHandler = new PreparedStatementHandler(this);
+        }
+        return statementHandler;
     }
 
 }
