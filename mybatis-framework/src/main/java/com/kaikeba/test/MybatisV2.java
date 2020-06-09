@@ -12,7 +12,6 @@ import com.kaikeba.framework.sqlsource.ParameterMapping;
 import com.kaikeba.framework.sqlsource.SqlSource;
 import com.kaikeba.framework.sqlsource.support.DynamicSqlSource;
 import com.kaikeba.framework.sqlsource.support.RawSqlSource;
-import com.kaikeba.framework.sqlsource.support.StaticSqlSource;
 import com.kaikeba.po.User;
 import com.kaikeba.util.SimpleTypeRegistry;
 import org.apache.commons.dbcp.BasicDataSource;
@@ -20,10 +19,12 @@ import org.dom4j.*;
 import org.dom4j.io.SAXReader;
 import org.junit.Test;
 
-import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Field;
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.*;
 
 /**
