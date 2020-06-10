@@ -10,16 +10,19 @@ import org.dom4j.Document;
 import org.dom4j.DocumentException;
 import org.dom4j.Element;
 import org.dom4j.io.SAXReader;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.io.InputStream;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * 功能描述：
+ * 功能描述：Spring IOC V2
+ * 暗号：天涯明月刀
  *
  * @author 刘嘉宇
  * @version 1.0.0
@@ -31,18 +34,27 @@ public class SpringV2 {
     /**
      * 单例bean容器
      */
-    private Map<String, Object> singletonDefinitions = new HashMap<>();
+    private Map<String, Object> singletonObjects = new HashMap<>();
 
     /**
      * 其他bean容器
      */
     private Map<String, BeanDefinition> beanDefinitions = new HashMap<>();
 
+    /**
+     * 解析bean信息并将其放入容器中
+     */
+    @Before
+    public void before() {
+        InputStream is = this.getClass().getClassLoader().getResourceAsStream("beans.xml");
+        Document document = createDocument(is);
+        if (document != null) {
+            parseBeanDefinitions(document.getRootElement());
+        }
+    }
+
     @Test
     public void test() {
-
-        // 解析bean信息并将其放入容器中
-        registerBeanDefinitions();
 
         // 取出想要的bean
         UserService userService = (UserService) getBean("userService");
@@ -57,7 +69,7 @@ public class SpringV2 {
     }
 
     private Object getBean(String beanName) {
-        Object bean = this.singletonDefinitions.get(beanName);
+        Object bean = this.singletonObjects.get(beanName);
 
         if (bean != null) {
             return bean;
@@ -70,7 +82,7 @@ public class SpringV2 {
 
         if (beanDefinition.isSingleton()) {
             bean = createBean(beanDefinition);
-            this.singletonDefinitions.put(beanName, bean);
+            this.singletonObjects.put(beanName, bean);
         } else if (beanDefinition.isPrototype()) {
             bean = createBean(beanDefinition);
         } else {
@@ -81,15 +93,82 @@ public class SpringV2 {
     }
 
     private Object createBean(BeanDefinition beanDefinition) {
-        return null;
+
+        Class<?> clazzType = beanDefinition.getClazzType();
+        if (clazzType == null) {
+            return null;
+        }
+
+        // 实例化bean
+        Object bean = createBeanInstance(clazzType);
+        if (bean == null) {
+            return null;
+        }
+
+        // 注入
+        populateBean(bean, beanDefinition);
+
+        // 调用初始化方法
+        invokeInitMethod(bean, beanDefinition);
+
+        return bean;
     }
 
-    private void registerBeanDefinitions() {
-        InputStream is = this.getClass().getClassLoader().getResourceAsStream("beans.xml");
-        Document document = createDocument(is);
-        if (document != null) {
-            parseBeanDefinitions(document.getRootElement());
+    private void invokeInitMethod(Object bean, BeanDefinition beanDefinition) {
+        try {
+            String initMethod = beanDefinition.getInitMethod();
+            if (initMethod == null) {
+                return;
+            }
+            Method method = bean.getClass().getDeclaredMethod(initMethod);
+            method.invoke(bean);
+        } catch (Exception e) {
+            e.printStackTrace();
         }
+    }
+
+    private void populateBean(Object bean, BeanDefinition beanDefinition) {
+        List<PropertyValue> propertyValues = beanDefinition.getPropertyValues();
+        if (propertyValues != null && propertyValues.size() > 0) {
+            for (PropertyValue propertyValue : propertyValues) {
+                String name = propertyValue.getName();
+                Object value = propertyValue.getValue();
+                Object value2Use = null;
+                if (value instanceof RuntimeBeanReference) {
+                    // 引用类型直接取bean
+                    value2Use = getBean(((RuntimeBeanReference) value).getRef());
+                } else if (value instanceof TypeStringValue) {
+                    // 简单类型是什么类型就转成什么类型
+                    TypeStringValue newValue = (TypeStringValue) value;
+                    if (newValue.getTargetType() == Integer.class) {
+                        value2Use = Integer.parseInt(newValue.getValue());
+                    } else if (newValue.getTargetType() == String.class) {
+                        value2Use = newValue.getValue();
+                    }
+                }
+                // 注入值
+                setProperty(bean, name, value2Use);
+            }
+        }
+    }
+
+    private void setProperty(Object bean, String name, Object value2Use) {
+        try {
+            Field declaredField = bean.getClass().getDeclaredField(name);
+            declaredField.setAccessible(true);
+            declaredField.set(bean, value2Use);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private Object createBeanInstance(Class<?> clazzType) {
+        try {
+            return clazzType.newInstance();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
     }
 
     private void parseBeanDefinitions(Element rootElement) {
@@ -155,7 +234,7 @@ public class SpringV2 {
         if (value != null && !"".equals(value)) {
             Class<?> targetType = getTypeByFieldName(beanDefinition.getClazzType(), name);
             TypeStringValue typeStringValue = new TypeStringValue();
-            typeStringValue.setName(name);
+            typeStringValue.setValue(value);
             typeStringValue.setTargetType(targetType);
             propertyValue = new PropertyValue(name, typeStringValue);
         } else if (ref != null && !"".equals(ref)) {

@@ -79,6 +79,10 @@ public class UserDaoImpl implements UserDao {
         return null;
     }
 
+    public void init() {
+        System.out.println("调用dao初始化方法");
+    }
+
     public void setDataSource(DataSource dataSource) {
         this.dataSource = dataSource;
     }

@@ -12,7 +12,7 @@ import lombok.Data;
 @Data
 public class TypeStringValue {
 
-    private String name;
+    private String value;
 
     private Class<?> targetType;
 

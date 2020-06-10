@@ -13,9 +13,9 @@
     <!-- 该类有一个初始化方法 -->
     <bean id="dataSource" class="org.apache.commons.dbcp.BasicDataSource" scope="singleton">
         <property name="driverClassName" value="com.mysql.jdbc.Driver"/>
-        <property name="url" value="jdbc:mysql://111.231.106.221:3306/kkb"/>
-        <property name="username" value="kkb"/>
-        <property name="password" value="kkb111111"/>
+        <property name="url" value="jdbc:mysql://localhost:3306/mybatis?characterEncoding=utf-8"/>
+        <property name="username" value="root"/>
+        <property name="password" value="123456"/>
     </bean>
 
 </beans>
