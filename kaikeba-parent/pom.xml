@@ -11,6 +11,7 @@
     <modules>
         <module>../mybatis-framework</module>
         <module>../spring-framework</module>
+        <module>../design-pattern</module>
     </modules>
 
     <dependencies>
