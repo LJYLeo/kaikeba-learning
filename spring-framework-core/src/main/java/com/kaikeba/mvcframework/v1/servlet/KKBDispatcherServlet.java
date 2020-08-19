@@ -27,10 +27,10 @@ import java.util.*;
  */
 public class KKBDispatcherServlet extends HttpServlet {
 
-    private Map<String, Object> mapping = new HashMap<>();
+    private final Map<String, Object> mapping = new HashMap<>();
 
     @Override
-    public void init(ServletConfig config) throws ServletException {
+    public void init(ServletConfig config) {
         InputStream is = null;
         Map<String, Object> extraMap = new HashMap<>();
 
@@ -142,7 +142,7 @@ public class KKBDispatcherServlet extends HttpServlet {
     }
 
     @Override
-    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         this.doPost(req, resp);
     }
 
