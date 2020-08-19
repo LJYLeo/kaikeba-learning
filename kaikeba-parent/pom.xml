@@ -13,6 +13,7 @@
         <module>../spring-framework</module>
         <module>../design-pattern</module>
         <module>../spring-mvc-framework</module>
+        <module>../spring-framework-core</module>
     </modules>
 
     <dependencies>
