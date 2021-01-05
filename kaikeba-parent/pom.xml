@@ -14,6 +14,7 @@
         <module>../design-pattern</module>
         <module>../spring-mvc-framework</module>
         <module>../spring-framework-core</module>
+        <module>../zookeeper</module>
     </modules>
 
     <dependencies>
